@@ -60,14 +60,18 @@ ros2 launch climb_robot_bringup simulation.launch.py arm:=false moveit:=false rv
 mounts:
   arm:    {xyz: [0.04, 0.0, 0.09],  rpy: [0.0, 0.0, 0.0]}
   lidar:  {xyz: [-0.15, 0.0, 0.075], rpy: [0.0, 0.0, 0.0]}
-  camera: {xyz: [0.0, 0.0, 0.045], rpy: [0.0, -1.57079632679, 0.0]}
+  camera_mount: {xyz: [0.035, 0.05, 0.03], rpy: [0.0, 3.14159265359, 1.57079632679]}
+  camera: {xyz: [0.02, 0.0, -0.061], rpy: [3.14159265359, 0.0, 0.0]}
+  imu: {xyz: [0.0, 0.0, 0.0], rpy: [0.0, 0.0, 0.0]}
 ```
 
 | 安装点/关节 | 相对父坐标系 | 修改入口 |
 |---|---|---|
 | UR3e 基座固定关节 | `base_link` | `mounts.arm.xyz/rpy` |
 | VLP-16 安装关节 | `base_link` | `mounts.lidar.xyz/rpy` |
-| D435i 底部安装螺孔固定关节 | `arm_tool0` | `mounts.camera.xyz/rpy` |
+| D435i 支架固定关节 | `arm_flange` | `mounts.camera_mount.xyz/rpy` |
+| D435i 底部安装螺孔固定关节 | `arm_flange` | `mounts.camera.xyz/rpy` |
+| 壳体中心 IMU 固定关节 | `base_link` | `mounts.imu.xyz/rpy` |
 | 四轮转动关节 | `base_link` | 前后 `x=±wheelbase/2`，左右 `y=±track_width/2`，高度 `z=axle_z` |
 | UR3e 内部六轴的固定几何变换 | 各自上一节连杆 | 官方 `ur_description/config/ur3e/default_kinematics.yaml`，可用 `arm.kinematics_file` 指定自己的副本 |
 | 六轴初始角度 | 各关节转轴 | `arm.initial_positions`，顺序见下文；这是关节角，不是安装 origin |
@@ -75,7 +79,10 @@ mounts:
 `xyz` 单位为米，`rpy` 单位为弧度，旋转采用 URDF 的 roll/pitch/yaw 约定。
 `origin` 定义父链接到子关节零位坐标系的固定变换；`axis` 定义转轴；运行时角度 `q` 是另一项变换。
 例如把 `mounts.lidar.xyz[0]` 从 -0.15 改为 -0.18，会将雷达向车尾移动 3 cm。
-相机本体以 +x 朝前，光学帧以 +z 看向场景；默认安装旋转让相机 +x 对齐 tool0 +z。
+相机本体以 +x 朝前，光学帧以 +z 看向场景；当前安装沿用提供的 MiR 模板，
+相机与支架均以 `arm_flange` 为安装参考，不再使用原来悬空的 tool0 偏移。
+`gazebo_models/D435i_mounted.STL` 的单位为毫米，视觉和碰撞均用 0.001 缩放。
+支架暂按 50 g、包围盒近似惯量建模，真实质量和质心需要实测后校准。
 修改后重新构建/启动；不要只改安装目录里的副本。
 
 机械臂关节有统一 `arm_` 前缀，顺序为：
@@ -135,9 +142,20 @@ ros2 action list | grep follow_joint_trajectory
 | 点云 | `/d435i/depth/color/points` |
 | 相机内参 | 各 image 话题同目录下的 `camera_info` |
 | IMU | `/camera/imu`，`d435i_gyro_optical_frame` |
+| 车体 IMU | `/imu/data`，`imu_link`，100 Hz |
 
 默认 640×480、10 Hz，修改 `camera.width/height/fps` 可控制渲染开销。
 深度不是工厂级 RealSense 噪声/畸变仿真，IMU 也为简化模型。
+
+车体 `imu_link` 默认在 base_link 的 `(0, 0, 0)`，位于 12 cm 高壳体内部中心，
+轴向与车体一致。绿色小盒表示电路板位置，正常外部视角会被壳体挡住；
+通过 RViz TF 显示可检查它的位置。电路板质量已包含在 body_mass 中，不再重复加质量，
+也不增加与车体重叠的内部碰撞体。车体 IMU 不依赖机械臂或相机开关。
+
+`/imu/data` 与 D435i 的 `/camera/imu` 独立；姿态使用世界参考，
+加速度与角速度在各自传感器坐标系中表达。车体 IMU 噪声标准差暂设为
+0.00017 rad/s 和 0.01 m/s²，不代表尚未选型的真实传感器指标。
+可用 `ros2 topic echo /imu/data --once` 检查，静止水平时 z 轴加速度应接近 +9.81 m/s²。
 颜色/深度未做真实标定配准；本版本不把深度点云自动加入 MoveIt OctoMap，避免自体点云误占据。
 
 ## 动力学变化与边界

@@ -2,7 +2,28 @@
   <xacro:include filename="$(find realsense2_description)/urdf/_d435.urdf.xacro"/>
   <xacro:include filename="$(find realsense2_description)/urdf/_d435i_imu_modules.urdf.xacro"/>
   <xacro:include filename="$(find realsense2_description)/urdf/_d435i_gazebo.xacro"/>
-  <xacro:macro name="climb_d435i" params="parent xyz rpy width height fps">
+  <xacro:macro name="climb_d435i" params="parent xyz rpy width height fps mount_xyz mount_rpy">
+    <!-- Flange transforms and millimetre scale follow the supplied MiR template. -->
+    <link name="d435i_mount_link">
+      <visual>
+        <geometry><mesh filename="package://gazebo_models/meshes/D435i_mounted.STL" scale="0.001 0.001 0.001"/></geometry>
+        <material name="camera_mount_grey"><color rgba="0.65 0.65 0.65 1"/></material>
+      </visual>
+      <collision>
+        <geometry><mesh filename="package://gazebo_models/meshes/D435i_mounted.STL" scale="0.001 0.001 0.001"/></geometry>
+      </collision>
+      <!-- Estimated 50 g bracket; uniform bounding-box inertia until measured. -->
+      <inertial>
+        <origin xyz="0.04942 0.01753 0.0686875"/>
+        <mass value="0.05"/>
+        <inertia ixx="${0.05*(0.03505**2+0.137375**2)/12}" iyy="${0.05*(0.098784**2+0.137375**2)/12}" izz="${0.05*(0.098784**2+0.03505**2)/12}" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+    <joint name="d435i_mount_joint" type="fixed">
+      <parent link="${parent}"/><child link="d435i_mount_link"/>
+      <origin xyz="${mount_xyz}" rpy="${mount_rpy}"/>
+    </joint>
+    <gazebo reference="d435i_mount_link"><material>Gazebo/Grey</material></gazebo>
     <xacro:sensor_d435 parent="${parent}" name="d435i" use_nominal_extrinsics="true"><origin xyz="${xyz}" rpy="${rpy}"/></xacro:sensor_d435>
     <xacro:d435i_imu_modules name="d435i" use_nominal_extrinsics="true"/>
     <xacro:gazebo_d435i reference_link="d435i_link" camera_name="d435i" topics_ns="d435i"

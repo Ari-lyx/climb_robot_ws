@@ -38,9 +38,13 @@
 <xacro:property name="lidar_rpy" value="$(arg lidar_rpy)"/>
 <xacro:arg name="camera_enabled" default="true"/>
 <xacro:property name="camera_enabled" value="$(arg camera_enabled)"/>
-<xacro:arg name="camera_xyz" default="0 0 0.045"/>
+<xacro:arg name="camera_mount_xyz" default="0.035 0.05 0.03"/>
+<xacro:arg name="camera_mount_rpy" default="0 3.14159265359 1.57079632679"/>
+<xacro:arg name="imu_xyz" default="0 0 0"/>
+<xacro:arg name="imu_rpy" default="0 0 0"/>
+<xacro:arg name="camera_xyz" default="0.02 0 -0.061"/>
 <xacro:property name="camera_xyz" value="$(arg camera_xyz)"/>
-<xacro:arg name="camera_rpy" default="0 -1.57079632679 0"/>
+<xacro:arg name="camera_rpy" default="3.14159265359 0 0"/>
 <xacro:property name="camera_rpy" value="$(arg camera_rpy)"/>
 <xacro:arg name="camera_width" default="640"/>
 <xacro:property name="camera_width" value="$(arg camera_width)"/>
@@ -119,6 +123,8 @@
     <collision><geometry><box size="${body_length} ${body_width} ${body_height}"/></geometry></collision>
   </link>
   <gazebo reference="base_link"><material>Gazebo/Orange</material></gazebo>
+  <xacro:include filename="$(find robot_description)/urdf/body_imu.xacro"/>
+  <xacro:body_imu parent="base_link" xyz="$(arg imu_xyz)" rpy="$(arg imu_rpy)"/>
 
   <!-- 轮子宏：一次定义、四次调用，四轮只差安装位置 (x, y)。
        轮轴统一为 +y，所以圆柱体要绕 x 转 90° 才能立起来。 -->
@@ -184,7 +190,7 @@
     </plugin></gazebo>
     <xacro:if value="${camera_enabled}">
       <xacro:include filename="$(find third_party)/urdf/d435i_mount.xacro"/>
-      <xacro:climb_d435i parent="arm_tool0" xyz="${camera_xyz}" rpy="${camera_rpy}" width="${camera_width}" height="${camera_height}" fps="${camera_fps}"/>
+      <xacro:climb_d435i parent="arm_flange" xyz="${camera_xyz}" rpy="${camera_rpy}" width="${camera_width}" height="${camera_height}" fps="${camera_fps}" mount_xyz="$(arg camera_mount_xyz)" mount_rpy="$(arg camera_mount_rpy)"/>
     </xacro:if>
   </xacro:if>
 </robot>

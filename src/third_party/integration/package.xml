@@ -7,6 +7,7 @@
     <license>Apache-2.0</license>
     <buildtool_depend>ament_cmake</buildtool_depend><depend>velodyne_description</depend>
     <depend>velodyne_gazebo_plugins</depend>
+    <exec_depend>gazebo_models</exec_depend>
     <depend>realsense2_description</depend><depend>realsense_gazebo_plugin</depend><export>
         <build_type>ament_cmake</build_type>
     </export>
