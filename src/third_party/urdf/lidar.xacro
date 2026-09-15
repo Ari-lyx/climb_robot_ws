@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- Adapter to the installed, BSD-licensed Dataspeed VLP-16 macro. -->
+  <xacro:include filename="$(find velodyne_description)/urdf/VLP-16.urdf.xacro"/>
+  <xacro:macro name="climb_lidar" params="parent z samples hz">
+    <xacro:VLP-16 parent="${parent}" name="lidar" topic="/velodyne_points"
+      samples="${samples}" hz="${hz}" min_range="0.15" max_range="30.0" gpu="false">
+      <origin xyz="0 0 ${z}" rpy="0 0 0"/>
+    </xacro:VLP-16>
+  </xacro:macro>
+</robot>

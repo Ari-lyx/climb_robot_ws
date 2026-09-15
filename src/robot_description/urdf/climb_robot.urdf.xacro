@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="climb_robot">
+  <xacro:arg name="body_length" default="0.42"/>
+  <xacro:property name="body_length" value="$(arg body_length)"/>
+  <xacro:arg name="body_width" default="0.28"/>
+  <xacro:property name="body_width" value="$(arg body_width)"/>
+  <xacro:arg name="body_height" default="0.12"/>
+  <xacro:property name="body_height" value="$(arg body_height)"/>
+  <xacro:arg name="body_mass" default="8.0"/>
+  <xacro:property name="body_mass" value="$(arg body_mass)"/>
+  <xacro:arg name="wheel_radius" default="0.075"/>
+  <xacro:property name="wheel_radius" value="$(arg wheel_radius)"/>
+  <xacro:arg name="wheel_width" default="0.045"/>
+  <xacro:property name="wheel_width" value="$(arg wheel_width)"/>
+  <xacro:arg name="wheel_mass" default="0.6"/>
+  <xacro:property name="wheel_mass" value="$(arg wheel_mass)"/>
+  <xacro:arg name="wheelbase" default="0.3"/>
+  <xacro:property name="wheelbase" value="$(arg wheelbase)"/>
+  <xacro:arg name="track_width" default="0.36"/>
+  <xacro:property name="track_width" value="$(arg track_width)"/>
+  <xacro:arg name="axle_z" default="-0.035"/>
+  <xacro:property name="axle_z" value="$(arg axle_z)"/>
+  <xacro:arg name="friction" default="0.9"/>
+  <xacro:property name="friction" value="$(arg friction)"/>
+  <xacro:arg name="motor_torque" default="8.0"/>
+  <xacro:property name="motor_torque" value="$(arg motor_torque)"/>
+  <xacro:arg name="velocity_integral_gain" default="8.0"/>
+  <xacro:property name="velocity_integral_gain" value="$(arg velocity_integral_gain)"/>
+  <xacro:arg name="velocity_gain" default="2.0"/>
+  <xacro:property name="velocity_gain" value="$(arg velocity_gain)"/>
+  <xacro:arg name="max_linear_speed" default="0.35"/>
+  <xacro:property name="max_linear_speed" value="$(arg max_linear_speed)"/>
+  <xacro:arg name="max_angular_speed" default="0.8"/>
+  <xacro:property name="max_angular_speed" value="$(arg max_angular_speed)"/>
+  <xacro:arg name="wheel_acceleration" default="8.0"/>
+  <xacro:property name="wheel_acceleration" value="$(arg wheel_acceleration)"/>
+  <xacro:arg name="command_timeout" default="0.5"/>
+  <xacro:property name="command_timeout" value="$(arg command_timeout)"/>
+  <xacro:arg name="magnet_force" default="90.0"/>
+  <xacro:property name="magnet_force" value="$(arg magnet_force)"/>
+  <xacro:arg name="magnet_decay" default="0.012"/>
+  <xacro:property name="magnet_decay" value="$(arg magnet_decay)"/>
+  <xacro:arg name="magnet_range" default="0.04"/>
+  <xacro:property name="magnet_range" value="$(arg magnet_range)"/>
+  <xacro:arg name="lidar_samples" default="360"/>
+  <xacro:property name="lidar_samples" value="$(arg lidar_samples)"/>
+  <xacro:arg name="lidar_hz" default="5"/>
+  <xacro:property name="lidar_hz" value="$(arg lidar_hz)"/>
+  <xacro:arg name="lidar_enabled" default="true"/>
+  <xacro:property name="lidar_enabled" value="$(arg lidar_enabled)"/>
+  <xacro:include filename="$(find third_party)/urdf/lidar.xacro"/>
+  <link name="base_link">
+    <inertial><mass value="${body_mass}"/><inertia ixx="${body_mass*(body_width**2+body_height**2)/12}" iyy="${body_mass*(body_length**2+body_height**2)/12}" izz="${body_mass*(body_length**2+body_width**2)/12}" ixy="0" ixz="0" iyz="0"/></inertial>
+    <visual><geometry><box size="${body_length} ${body_width} ${body_height}"/></geometry><material name="orange"><color rgba="1 0.4 0.05 1"/></material></visual>
+    <collision><geometry><box size="${body_length} ${body_width} ${body_height}"/></geometry></collision>
+  </link>
+  <gazebo reference="base_link"><material>Gazebo/Orange</material></gazebo>
+  <xacro:macro name="wheel" params="name x y">
+    <link name="${name}_wheel">
+      <inertial><mass value="${wheel_mass}"/><inertia ixx="${wheel_mass*(3*wheel_radius**2+wheel_width**2)/12}" iyy="${wheel_mass*wheel_radius**2/2}" izz="${wheel_mass*(3*wheel_radius**2+wheel_width**2)/12}" ixy="0" ixz="0" iyz="0"/></inertial>
+      <visual><origin rpy="${pi/2} 0 0"/><geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry><material name="rubber"><color rgba="0.08 0.08 0.09 1"/></material></visual>
+      <collision><origin rpy="${pi/2} 0 0"/><geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry></collision>
+    </link>
+    <joint name="${name}_joint" type="continuous"><parent link="base_link"/><child link="${name}_wheel"/><origin xyz="${x} ${y} ${axle_z}"/><axis xyz="0 1 0"/><limit effort="${motor_torque}" velocity="30"/><dynamics damping="0.01" friction="0.0"/></joint>
+    <gazebo reference="${name}_wheel"><material>Gazebo/Black</material><mu1>${friction}</mu1><mu2>${friction}</mu2><kp>200000</kp><kd>200</kd><minDepth>0.0005</minDepth><maxVel>0.05</maxVel></gazebo>
+  </xacro:macro>
+  <xacro:wheel name="front_left" x="${wheelbase/2}" y="${track_width/2}"/>
+  <xacro:wheel name="front_right" x="${wheelbase/2}" y="${-track_width/2}"/>
+  <xacro:wheel name="rear_left" x="${-wheelbase/2}" y="${track_width/2}"/>
+  <xacro:wheel name="rear_right" x="${-wheelbase/2}" y="${-track_width/2}"/>
+  <xacro:if value="${lidar_enabled}"><xacro:climb_lidar parent="base_link" z="${body_height/2+0.015}" samples="${lidar_samples}" hz="${lidar_hz}"/></xacro:if>
+  <gazebo><plugin name="magnetic_drive" filename="libmagnetic_drive.so">
+    <ros><namespace>/</namespace></ros>
+    <wheel_radius>${wheel_radius}</wheel_radius><wheel_width>${wheel_width}</wheel_width><track_width>${track_width}</track_width>
+    <motor_torque>${motor_torque}</motor_torque><velocity_gain>${velocity_gain}</velocity_gain><velocity_integral_gain>${velocity_integral_gain}</velocity_integral_gain>
+    <max_linear_speed>${max_linear_speed}</max_linear_speed><max_angular_speed>${max_angular_speed}</max_angular_speed>
+    <wheel_acceleration>${wheel_acceleration}</wheel_acceleration><command_timeout>${command_timeout}</command_timeout>
+    <magnet_force>${magnet_force}</magnet_force><magnet_decay>${magnet_decay}</magnet_decay><magnet_range>${magnet_range}</magnet_range>
+    <tank_model>tank</tank_model>
+  </plugin></gazebo>
+</robot>

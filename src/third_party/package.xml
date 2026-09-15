@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+    <package format="3">
+    <name>third_party</name>
+    <version>0.1.0</version>
+    <description>Magnetic spherical tank climbing simulation: third_party</description>
+    <maintainer email="maintainer@example.com">Climb Robot Maintainers</maintainer>
+    <license>Apache-2.0</license>
+    <buildtool_depend>ament_cmake</buildtool_depend><depend>velodyne_description</depend>
+    <depend>velodyne_gazebo_plugins</depend>
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

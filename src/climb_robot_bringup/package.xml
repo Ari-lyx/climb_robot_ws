@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+    <name>climb_robot_bringup</name>
+    <version>0.1.0</version>
+    <description>Magnetic spherical tank climbing simulation: climb_robot_bringup</description>
+    <maintainer email="maintainer@example.com">Climb Robot Maintainers</maintainer>
+    <license>Apache-2.0</license>
+    <buildtool_depend>ament_cmake</buildtool_depend>
+    <depend>robot_description</depend>
+    <depend>robot_control_driver</depend>
+    <depend>gazebo_models</depend>
+    <depend>gazebo_ros</depend>
+    <depend>robot_state_publisher</depend>
+    <depend>launch_ros</depend>
+    <depend>python3-yaml</depend>
+    <depend>xacro</depend>
+    <exec_depend>rclpy</exec_depend>
+    <exec_depend>geometry_msgs</exec_depend>
+    <exec_depend>gazebo_msgs</exec_depend>
+    <exec_depend>tf2_msgs</exec_depend>
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

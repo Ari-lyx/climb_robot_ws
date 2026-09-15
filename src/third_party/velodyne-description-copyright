@@ -1,0 +1,9 @@
+Format: Bloom subset of https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: velodyne_description
+Upstream-Contact: https://bitbucket.org/dataspeedinc/velodyne_simulator/issues
+Source: https://bitbucket.org/dataspeedinc/velodyne_simulator
+
+Files: See file headers in repository for details
+Copyright: See package copyright in source code for details
+License: BSD
+ See repository for full license text

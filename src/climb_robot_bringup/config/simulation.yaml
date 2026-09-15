@@ -1,0 +1,36 @@
+# SI units: m, kg, s, N, Nm. Restart launch after changes.
+robot:
+  body_length: 0.42
+  body_width: 0.28
+  body_height: 0.12
+  body_mass: 8.0
+  wheel_radius: 0.075
+  wheel_width: 0.045
+  wheel_mass: 0.6
+  wheelbase: 0.30
+  track_width: 0.36
+  axle_z: -0.035
+  friction: 0.9
+  motor_torque: 8.0
+  velocity_gain: 2.0
+  velocity_integral_gain: 8.0
+  max_linear_speed: 0.35
+  max_angular_speed: 0.8
+  wheel_acceleration: 8.0
+  command_timeout: 0.5
+  magnet_force: 90.0
+  magnet_decay: 0.012
+  magnet_range: 0.04
+  lidar_samples: 360
+  lidar_hz: 5
+  lidar_enabled: true
+tank:
+  radius: 3.0
+  thickness: 0.06
+  center_z: 3.15
+  latitude_segments: 96
+  longitude_segments: 192
+physics:
+  step_size: 0.001
+  update_rate: 1000
+  solver_iterations: 100
