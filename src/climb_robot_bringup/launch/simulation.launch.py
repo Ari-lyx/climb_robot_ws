@@ -27,6 +27,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from gazebo_models.world import generate_world, spawn_pose
 import os
+import runpy
 
 
 def setup(context):
@@ -35,6 +36,9 @@ def setup(context):
     cfg_path=LaunchConfiguration('config').perform(context)
     config=yaml.safe_load(Path(cfg_path).read_text())
     robot=config['robot']
+    arm_enabled=config.get('arm',{}).get('enabled',True) and LaunchConfiguration('arm').perform(context)=='true'
+    camera_enabled=config.get('camera',{}).get('enabled',True) and LaunchConfiguration('camera').perform(context)=='true'
+    moveit_enabled=arm_enabled and LaunchConfiguration('moveit').perform(context)=='true'
     # ---- 2) 参数校验：长度/质量等必须是有限正数；axle_z 允许为负（轮轴低于车体中心）----
     for key,value in robot.items():
         if isinstance(value,bool):continue
@@ -53,6 +57,9 @@ def setup(context):
     if robot['wheel_radius']-robot['axle_z']<=robot['body_height']/2:
         raise ValueError('body bottom must clear the contact plane')
     for key,value in config['physics'].items():
+        if key=='solver_type':
+            if value not in ('world','quick'):raise ValueError('solver_type must be world or quick')
+            continue
         if not math.isfinite(float(value)) or float(value)<=0:raise ValueError(f'Invalid physics parameter: {key}')
     # ---- 4) 世界模式 + 出生位姿：位姿由解析几何算出，保证初始不与球壳穿插 ----
     mode=LaunchConfiguration('world').perform(context)
@@ -63,8 +70,21 @@ def setup(context):
     world_path=generate_world(output,config,mode)
     # ---- 6) YAML 的值直接作为 xacro 的 arg 映射，展开成完整 URDF ----
     # 布尔统一转成小写字符串，xacro 侧再用 $(arg xxx) 取用。
+    mappings={k:str(v).lower() if isinstance(v,bool) else str(v) for k,v in robot.items()}
+    for mount,values in config['mounts'].items():
+        for field in ('xyz','rpy'):
+            if len(values[field])!=3 or not all(math.isfinite(float(x)) for x in values[field]):raise ValueError(f'Invalid {mount} {field}')
+            mappings[f'{mount}_{field}']=' '.join(str(x) for x in values[field])
+    if config['arm'].get('kinematics_file'):
+        mappings['arm_kinematics_file']=str(Path(config['arm']['kinematics_file']).resolve(strict=True))
+    arm_initial=config['arm']['initial_positions']
+    if len(arm_initial)!=6 or not all(math.isfinite(float(x)) for x in arm_initial):raise ValueError('Need six finite arm initial_positions')
+    initial_path=Path(output,'arm_initial.yaml')
+    initial_path.write_text(yaml.safe_dump(dict(zip(['shoulder_pan_joint','shoulder_lift_joint','elbow_joint','wrist_1_joint','wrist_2_joint','wrist_3_joint'],arm_initial))))
+    mappings.update(arm_enabled=str(arm_enabled).lower(),camera_enabled=str(camera_enabled).lower(),arm_initial_file=str(initial_path))
+    for key in ('width','height','fps'):mappings['camera_'+key]=str(config['camera'][key])
     robot_xml=xacro.process_file(str(Path(get_package_share_directory('robot_description'))/'urdf/climb_robot.urdf.xacro'),
-        mappings={k:str(v).lower() if isinstance(v,bool) else str(v) for k,v in robot.items()})
+        mappings=mappings)
     # URDF-to-SDF turns package:// into model://, which Gazebo cannot resolve
     # with an isolated model directory. Resolve installed mesh assets explicitly.
     # 中文说明：URDF→SDF 会把 package:// 改写成 model://，而 Gazebo 在隔离的模型目录下
@@ -77,6 +97,13 @@ def setup(context):
             if not asset.is_file():
                 raise FileNotFoundError(f'Missing robot mesh: {asset}')
             mesh.setAttribute('filename',asset.as_uri())
+    # gazebo_ros2_control forwards URDF via a ROS parameter CLI argument. XML
+    # comments containing ': ' can be misread as YAML; they are not model data.
+    def strip_comments(node):
+        for child in list(node.childNodes):
+            if child.nodeType==child.COMMENT_NODE:node.removeChild(child)
+            else:strip_comments(child)
+    strip_comments(robot_xml)
     description=robot_xml.toxml()
     Path(output,'robot.urdf').write_text(description)
     # The stock gazebo_ros launch collects every installed package's model exports.
@@ -94,7 +121,7 @@ def setup(context):
     # 插件搜索路径：本包自研插件 + gazebo_ros 官方插件 + 雷达点云插件，
     # 并保留当前环境已有的 GAZEBO_PLUGIN_PATH；dict.fromkeys 用于去重且保持顺序。
     plugin_dirs=[str(Path(get_package_prefix(package))/'lib') for package in
-                 ('robot_control_driver','gazebo_ros','velodyne_gazebo_plugins')]
+                 ('robot_control_driver','gazebo_ros','velodyne_gazebo_plugins','realsense_gazebo_plugin','gazebo_ros2_control')]
     plugin_dirs.append(os.environ.get('GAZEBO_PLUGIN_PATH',''))
     gazebo_env={
         'GAZEBO_MODEL_PATH':str(model_dir),
@@ -103,7 +130,17 @@ def setup(context):
     }
     # ---- 7) 返回要启动的动作：gzserver / gzclient / robot_state_publisher / spawn_entity ----
     # 这些动作会被 OpaqueFunction 就地插入到 LaunchDescription 中。
-    return [
+    extras=[Node(package='climb_robot_bringup',executable='joint_state_mux.py',parameters=[{'use_sim_time':True}],output='screen')]
+    if arm_enabled:
+        for controller in ('arm_joint_state_broadcaster','arm_controller'):
+            extras.append(Node(package='controller_manager',executable='spawner',arguments=[controller,'--controller-manager','/controller_manager','--controller-manager-timeout','120'],output='screen'))
+    if moveit_enabled:
+        share=Path(get_package_share_directory('climb_arm_moveit_config'))
+        moveit_config=runpy.run_path(str(share/'config/build_config.py'))['make_moveit'](description,arm_initial)
+        extras.append(Node(package='moveit_ros_move_group',executable='move_group',parameters=[moveit_config],output='screen'))
+        extras.append(Node(package='climb_robot_bringup',executable='planning_environment.py',parameters=[{'use_sim_time':True,'world_mesh':str(Path(output,'tank.stl')) if mode!='ground' else '', 'radius':float(config['tank']['radius']),'center_z':float(config['tank']['center_z'])}],output='screen'))
+        extras.append(Node(package='rviz2',executable='rviz2',arguments=['-d',str(share/'config/moveit.rviz')],parameters=[moveit_config],condition=IfCondition(LaunchConfiguration('rviz')),output='screen'))
+    return extras+[
         # gzserver 直接加载现场生成的 world 文件；加载 ROS 初始化与实体工厂两个系统插件。
         # on_exit=Shutdown：用户关掉 Gazebo 后，整个 launch（含各节点）一起退出。
         ExecuteProcess(cmd=['gzserver',world_path,'--verbose',
@@ -127,6 +164,10 @@ def generate_launch_description():
         DeclareLaunchArgument('config',default_value=str(Path(get_package_share_directory('climb_robot_bringup'))/'config/simulation.yaml')),
         # world：场景模式。hemisphere=下半球开口，sphere=完整球壳，ground=普通地面。
         DeclareLaunchArgument('world',default_value='hemisphere',choices=['hemisphere','sphere','ground']),
+        DeclareLaunchArgument('arm',default_value='true',choices=['true','false']),
+        DeclareLaunchArgument('camera',default_value='true',choices=['true','false']),
+        DeclareLaunchArgument('moveit',default_value='true',choices=['true','false']),
+        DeclareLaunchArgument('rviz',default_value='true',choices=['true','false']),
         DeclareLaunchArgument('gui',default_value='true',choices=['true','false']),
         # spawn_angle_deg：出生角，从球底沿 +x 量起，0=球底，90=竖直内壁，180=顶端。
         DeclareLaunchArgument('spawn_angle_deg',default_value='0'),

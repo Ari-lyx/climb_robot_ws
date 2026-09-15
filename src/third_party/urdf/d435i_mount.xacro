@@ -1,0 +1,17 @@
+<?xml version="1.0"?><robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find realsense2_description)/urdf/_d435.urdf.xacro"/>
+  <xacro:include filename="$(find realsense2_description)/urdf/_d435i_imu_modules.urdf.xacro"/>
+  <xacro:include filename="$(find realsense2_description)/urdf/_d435i_gazebo.xacro"/>
+  <xacro:macro name="climb_d435i" params="parent xyz rpy width height fps">
+    <xacro:sensor_d435 parent="${parent}" name="d435i" use_nominal_extrinsics="true"><origin xyz="${xyz}" rpy="${rpy}"/></xacro:sensor_d435>
+    <xacro:d435i_imu_modules name="d435i" use_nominal_extrinsics="true"/>
+    <xacro:gazebo_d435i reference_link="d435i_link" camera_name="d435i" topics_ns="d435i"
+      depth_optical_frame="d435i_depth_optical_frame" color_optical_frame="d435i_color_optical_frame"
+      infrared1_optical_frame="d435i_infra1_optical_frame" infrared2_optical_frame="d435i_infra2_optical_frame"
+      accel_optical_frame="d435i_accel_optical_frame" gyro_optical_frame="d435i_gyro_optical_frame"
+      depth_width="${width}" depth_height="${height}" depth_fps="${fps}"
+      color_width="${width}" color_height="${height}" color_fps="${fps}"
+      infra_width="${width}" infra_height="${height}" infra_fps="${fps}"
+      gyro_fps="100" accel_fps="100" enable_pointCloud="true" clip_distance="6.0" visualize="false"/>
+  </xacro:macro>
+</robot>

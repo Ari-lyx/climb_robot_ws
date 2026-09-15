@@ -18,7 +18,7 @@
     <exec_depend>geometry_msgs</exec_depend>
     <exec_depend>gazebo_msgs</exec_depend>
     <exec_depend>tf2_msgs</exec_depend>
-    <export>
+    <exec_depend>climb_arm_moveit_config</exec_depend><exec_depend>gazebo_ros2_control</exec_depend><exec_depend>joint_state_broadcaster</exec_depend><exec_depend>joint_trajectory_controller</exec_depend><exec_depend>moveit_msgs</exec_depend><exec_depend>shape_msgs</exec_depend><exec_depend>nav_msgs</exec_depend><export>
         <build_type>ament_cmake</build_type>
     </export>
 </package>

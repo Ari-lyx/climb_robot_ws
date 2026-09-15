@@ -22,7 +22,7 @@ robot:
   axle_z: -0.035
   friction: 0.9
   # --- 电机与速度环：扭矩上限、PI 增益、限速、加速度限幅、命令超时（超时后制动）---
-  motor_torque: 8.0
+  motor_torque: 18.0
   velocity_gain: 2.0
   velocity_integral_gain: 8.0
   max_linear_speed: 0.35
@@ -30,7 +30,7 @@ robot:
   wheel_acceleration: 8.0
   command_timeout: 0.5
   # --- 磁吸三参数：接触吸力上限[N]、近场衰减长度[m]、捕获距离[m] ---
-  magnet_force: 90.0
+  magnet_force: 250.0
   magnet_decay: 0.012
   magnet_range: 0.04
   # --- 雷达 ---
@@ -51,6 +51,8 @@ physics:
   step_size: 0.001
   update_rate: 1000
   solver_iterations: 100
+  constraint_cfm: 0.000001  # 微小约束柔度，防止直接求解器遇到奇异接触矩阵
+  solver_type: world  # ODE direct solver for arm/wheel constraint chain
 
 # --- 仅视觉焊缝：不生成 collision，不改变磁吸/轮胎接触或 CPU ray 点云 ---
 welds:
@@ -64,3 +66,19 @@ welds:
   segment_length: 0.025         # 沿焊缝的网格分段长度 m
   cross_section_segments: 12   # 半椭圆截面细分
   texture_pitch: 0.012          # 鱼鳞纹理沿焊缝的重复间距 m
+
+# UR3e 保留官方尺寸/惯量；arm:=false 可恢复无机械臂模型。
+arm:
+  enabled: true
+  kinematics_file: ""  # 留空使用官方 UR3e default_kinematics.yaml；可指定自定义绝对路径
+  initial_positions: [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+camera:
+  enabled: true
+  width: 640
+  height: 480
+  fps: 10
+# origin 相对 parent，xyz 单位 m，rpy 单位 rad。
+mounts:
+  arm: {xyz: [0.04, 0.0, 0.09], rpy: [0.0, 0.0, 0.0]}  # parent=base_link
+  lidar: {xyz: [-0.15, 0.0, 0.075], rpy: [0.0, 0.0, 0.0]} # parent=base_link
+  camera: {xyz: [0.0, 0.0, 0.045], rpy: [0.0, -1.57079632679, 0.0]} # parent=arm_tool0

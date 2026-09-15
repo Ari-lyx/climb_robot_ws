@@ -24,6 +24,34 @@
     ${expr}     —— xacro 表达式求值，可做算术和访问 property。
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="climb_robot">
+<xacro:arg name="arm_kinematics_file" default="$(find ur_description)/config/ur3e/default_kinematics.yaml"/>
+<xacro:property name="arm_kinematics_file" value="$(arg arm_kinematics_file)"/>
+<xacro:arg name="arm_enabled" default="true"/>
+<xacro:property name="arm_enabled" value="$(arg arm_enabled)"/>
+<xacro:arg name="arm_xyz" default="0.04 0 0.09"/>
+<xacro:property name="arm_xyz" value="$(arg arm_xyz)"/>
+<xacro:arg name="arm_rpy" default="0 0 0"/>
+<xacro:property name="arm_rpy" value="$(arg arm_rpy)"/>
+<xacro:arg name="lidar_xyz" default="-0.15 0 0.075"/>
+<xacro:property name="lidar_xyz" value="$(arg lidar_xyz)"/>
+<xacro:arg name="lidar_rpy" default="0 0 0"/>
+<xacro:property name="lidar_rpy" value="$(arg lidar_rpy)"/>
+<xacro:arg name="camera_enabled" default="true"/>
+<xacro:property name="camera_enabled" value="$(arg camera_enabled)"/>
+<xacro:arg name="camera_xyz" default="0 0 0.045"/>
+<xacro:property name="camera_xyz" value="$(arg camera_xyz)"/>
+<xacro:arg name="camera_rpy" default="0 -1.57079632679 0"/>
+<xacro:property name="camera_rpy" value="$(arg camera_rpy)"/>
+<xacro:arg name="camera_width" default="640"/>
+<xacro:property name="camera_width" value="$(arg camera_width)"/>
+<xacro:arg name="camera_height" default="480"/>
+<xacro:property name="camera_height" value="$(arg camera_height)"/>
+<xacro:arg name="camera_fps" default="10"/>
+<xacro:property name="camera_fps" value="$(arg camera_fps)"/>
+<xacro:arg name="arm_initial_file" default=""/>
+<xacro:property name="arm_initial_file" value="$(arg arm_initial_file)"/>
+<xacro:arg name="arm_controllers_file" default="$(find climb_arm_moveit_config)/config/ros2_controllers.yaml"/>
+<xacro:property name="arm_controllers_file" value="$(arg arm_controllers_file)"/>
   <!-- ===== 车体几何与质量（对应 simulation.yaml 的 robot 段）===== -->
   <xacro:arg name="body_length" default="0.42"/>
   <xacro:property name="body_length" value="$(arg body_length)"/>
@@ -111,14 +139,14 @@
   <xacro:wheel name="rear_left" x="${-wheelbase/2}" y="${track_width/2}"/>
   <xacro:wheel name="rear_right" x="${-wheelbase/2}" y="${-track_width/2}"/>
   <!-- 雷达可选：lidar_enabled=false 时整个传感器不挂载 -->
-  <xacro:if value="${lidar_enabled}"><xacro:climb_lidar parent="base_link" z="${body_height/2+0.015}" samples="${lidar_samples}" hz="${lidar_hz}"/></xacro:if>
+  <xacro:if value="${lidar_enabled}"><xacro:climb_lidar parent="base_link" xyz="${lidar_xyz}" rpy="${lidar_rpy}" samples="${lidar_samples}" hz="${lidar_hz}"/></xacro:if>
 
   <!-- 自研 ModelPlugin：四轮扭矩驱动 + 近场磁吸。
        plugin 内每个子标签名都被 magnetic_drive.cpp 用 sdf->Get<>(...) 读取，
        标签名和值一起通过这里的 ${} 注入，形成“YAML → xacro → 插件”的单向数据流。
        tank_model 指定要吸附的模型名，对应 world.py 里生成的 <model name="tank">。 -->
   <gazebo><plugin name="magnetic_drive" filename="libmagnetic_drive.so">
-    <ros><namespace>/</namespace></ros>
+    <ros><namespace>/</namespace><remapping>joint_states:=wheel_joint_states</remapping></ros>
     <wheel_radius>${wheel_radius}</wheel_radius><wheel_width>${wheel_width}</wheel_width><track_width>${track_width}</track_width>
     <motor_torque>${motor_torque}</motor_torque><velocity_gain>${velocity_gain}</velocity_gain><velocity_integral_gain>${velocity_integral_gain}</velocity_integral_gain>
     <max_linear_speed>${max_linear_speed}</max_linear_speed><max_angular_speed>${max_angular_speed}</max_angular_speed>
@@ -126,4 +154,37 @@
     <magnet_force>${magnet_force}</magnet_force><magnet_decay>${magnet_decay}</magnet_decay><magnet_range>${magnet_range}</magnet_range>
     <tank_model>tank</tank_model>
   </plugin></gazebo>
+
+  <xacro:if value="${arm_enabled}">
+    <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+    <xacro:property name="initial" value="${xacro.load_yaml(arm_initial_file) if arm_initial_file else dict(shoulder_pan_joint=0.0,shoulder_lift_joint=-1.5708,elbow_joint=1.5708,wrist_1_joint=-1.5708,wrist_2_joint=-1.5708,wrist_3_joint=0.0)}"/>
+    <xacro:ur_robot name="ur3e" tf_prefix="arm_" parent="base_link" ur_type="ur3e"
+      joint_limits_parameters_file="$(find ur_description)/config/ur3e/joint_limits.yaml"
+      kinematics_parameters_file="${arm_kinematics_file}"
+      physical_parameters_file="$(find ur_description)/config/ur3e/physical_parameters.yaml"
+      visual_parameters_file="$(find ur_description)/config/ur3e/visual_parameters.yaml"
+      sim_gazebo="true" generate_ros2_control_tag="false" initial_positions="${initial}">
+      <origin xyz="${arm_xyz}" rpy="${arm_rpy}"/>
+    </xacro:ur_robot>
+
+    <!-- Expose only effort commands: no competing position/velocity actuators. -->
+    <xacro:macro name="arm_control_joint" params="joint">
+      <joint name="arm_${joint}"><command_interface name="effort"/><state_interface name="position"><param name="initial_value">${initial[joint]}</param></state_interface><state_interface name="velocity"/><state_interface name="effort"/></joint>
+    </xacro:macro>
+    <ros2_control name="ur3e" type="system"><hardware><plugin>gazebo_ros2_control/GazeboSystem</plugin></hardware>
+      <xacro:arm_control_joint joint="shoulder_pan_joint"/>
+      <xacro:arm_control_joint joint="shoulder_lift_joint"/>
+      <xacro:arm_control_joint joint="elbow_joint"/>
+      <xacro:arm_control_joint joint="wrist_1_joint"/>
+      <xacro:arm_control_joint joint="wrist_2_joint"/>
+      <xacro:arm_control_joint joint="wrist_3_joint"/>
+    </ros2_control>
+    <gazebo><plugin name="arm_ros2_control" filename="libgazebo_ros2_control.so">
+      <parameters>${arm_controllers_file}</parameters><hold_joints>true</hold_joints>
+    </plugin></gazebo>
+    <xacro:if value="${camera_enabled}">
+      <xacro:include filename="$(find third_party)/urdf/d435i_mount.xacro"/>
+      <xacro:climb_d435i parent="arm_tool0" xyz="${camera_xyz}" rpy="${camera_rpy}" width="${camera_width}" height="${camera_height}" fps="${camera_fps}"/>
+    </xacro:if>
+  </xacro:if>
 </robot>

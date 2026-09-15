@@ -1,6 +1,0 @@
-cmake_minimum_required(VERSION 3.16)
-project(third_party)
-find_package(ament_cmake REQUIRED)
-install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME})
-install(FILES README.md velodyne-description-copyright velodyne-gazebo-plugins-copyright DESTINATION share/${PROJECT_NAME})
-ament_package()
