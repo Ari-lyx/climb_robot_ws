@@ -6,6 +6,9 @@ JOINTS=['arm_'+j for j in ['shoulder_pan_joint','shoulder_lift_joint','elbow_joi
 def make_moveit(description,initial):
     urdf=ET.fromstring(description)
     srdf=ET.Element('robot',name=urdf.attrib['name'])
+    # Track the mobile base through the existing world -> base_link TF. This
+    # joint is outside the arm group and is never commanded by MoveIt.
+    ET.SubElement(srdf,'virtual_joint',name='world_joint',type='floating',parent_frame='world',child_link='base_link')
     group=ET.SubElement(srdf,'group',name='arm')
     ET.SubElement(group,'chain',base_link='arm_base_link',tip_link='arm_tool0')
     for name,q in [('ready',initial),('inspect',[initial[0]+.3,*initial[1:]])]:

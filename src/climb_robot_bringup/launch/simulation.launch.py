@@ -25,7 +25,7 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from gazebo_models.world import generate_world, spawn_pose
+from gazebo_models.world import generate_world, spawn_pose, planning_shell_mesh
 import os
 import runpy
 
@@ -135,10 +135,18 @@ def setup(context):
         for controller in ('arm_joint_state_broadcaster','arm_controller'):
             extras.append(Node(package='controller_manager',executable='spawner',arguments=[controller,'--controller-manager','/controller_manager','--controller-manager-timeout','120'],output='screen'))
     if moveit_enabled:
+        # MoveIt does not need the dense Gazebo contact mesh. Inscribed inner
+        # facets conservatively reduce free space; expand the outer surface so
+        # its coarse facets still enclose the physical outer sphere.
+        planning_mesh=''
+        if mode!='ground':
+            planning_mesh=str(Path(output,'tank_planning.stl'))
+            radius=float(config['tank']['radius'])
+            planning_shell_mesh(planning_mesh,radius,float(config['tank']['thickness']),mode=='hemisphere')
         share=Path(get_package_share_directory('climb_arm_moveit_config'))
         moveit_config=runpy.run_path(str(share/'config/build_config.py'))['make_moveit'](description,arm_initial)
         extras.append(Node(package='moveit_ros_move_group',executable='move_group',parameters=[moveit_config],output='screen'))
-        extras.append(Node(package='climb_robot_bringup',executable='planning_environment.py',parameters=[{'use_sim_time':True,'world_mesh':str(Path(output,'tank.stl')) if mode!='ground' else '', 'radius':float(config['tank']['radius']),'center_z':float(config['tank']['center_z'])}],output='screen'))
+        extras.append(Node(package='climb_robot_bringup',executable='planning_environment.py',parameters=[{'use_sim_time':True,'world_mesh':planning_mesh, 'radius':float(config['tank']['radius']),'center_z':float(config['tank']['center_z'])}],output='screen'))
         extras.append(Node(package='rviz2',executable='rviz2',arguments=['-d',str(share/'config/moveit.rviz')],parameters=[moveit_config],condition=IfCondition(LaunchConfiguration('rviz')),output='screen'))
     return extras+[
         # gzserver 直接加载现场生成的 world 文件；加载 ROS 初始化与实体工厂两个系统插件。

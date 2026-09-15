@@ -11,7 +11,9 @@ ros2 launch climb_robot_bringup simulation.launch.py
 ```
 
 默认加载真实尺寸的 UR3e、末端 D435i、Gazebo、MoveIt move_group 和 RViz。
-在 RViz 的 MotionPlanning 中选择 `arm` 组，拖动末端目标，点击 Plan，再 Execute；
+在 RViz 的 MotionPlanning 中选择 `arm` 组。默认只显示实际机器人，避免启动时的目标叠影。
+需要拖动末端时，在 Displays → MotionPlanning → Planning Request 中勾选
+`Query Goal State`，再选择工具栏 `Interact`，拖动目标并点击 Plan、Execute；
 也可以选命名目标 `ready` 或 `inspect`。路径通过碰撞检查后发送给 Gazebo 中的机械臂。
 
 脚本方式同样经过 MoveIt 规划和执行，默认将当前肩部绕竖轴角度增加 0.25 rad：
@@ -21,9 +23,25 @@ ros2 run climb_arm_moveit_config arm_demo.py --pan-offset 0.25
 ```
 
 机械臂操作期间保持底盘停止。首版是“移动到位后操作机械臂”，没有车臂协同规划。
-MoveIt 的规划参考系是 `base_link`；环境节点根据 `/odom` 更新球壳和地面在该参考系中的位置。
+MoveIt 的规划参考系是 `world`；浮动虚拟关节 `world_joint` 从现有
+`world → base_link` TF 跟踪底盘位姿，但不属于 `arm` 组，也不驱动底盘。
+环境节点只安装一次世界坐标系中的静态球壳和地面，不再每 0.2 秒移动整片罐壁。
 球壳与地面对机械臂参与碰撞检查，仅允许四轮与这些表面的正常接触。
 已知的视觉焊缝不作为障碍物，RGB/深度相机仍能看到视觉焊缝。
+
+## RViz 性能与规划碰撞模型
+
+- `arm` 规划组始终只有机械臂六轴。完整机器人描述仍保留车体、雷达和末端相机，
+  让机械臂规划检查这些碰撞；把这些 link 删掉并不能正确代替性能优化。
+- Gazebo 使用原有高精度球壳接触网格，MoveIt 单独使用 `tank_planning.stl`：
+  默认半球由 73,728 面降为 4,608 面。规划壳体内面向内保守近似，外面扩张包住外球面。
+  半径 3 m 时，内部可用间隙的保守缩减上界为半球约 14.5 mm、完整球约 25.7 mm；
+  近壁精细作业应结合这个余量评估，不能当作和 Gazebo 完全相同的碰撞几何。
+- RViz 默认关闭 `Scene Geometry → Show Scene Geometry`，只隐藏罐体绘制，
+  不删除规划器中的碰撞对象。需要检查障碍物时可重新勾选。
+- `Move Camera` 用来旋转/平移视角；`Interact` 用来拖动启用的机械臂目标。
+- 改动后构建 `gazebo_models`、`climb_robot_bringup`、`climb_arm_moveit_config`，
+  再重启 launch。不要用 RViz 保存的旧配置覆盖新的默认配置。
 
 ```bash
 # 无窗口：深度相机的渲染仍需要图形环境/GPU，gui=false 仅关闭客户端窗口

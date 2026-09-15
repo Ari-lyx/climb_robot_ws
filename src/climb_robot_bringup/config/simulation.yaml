@@ -50,7 +50,7 @@ tank:
 physics:
   step_size: 0.001
   update_rate: 1000
-  solver_iterations: 100
+  solver_iterations: 300  # quick 求解器需要充分收敛机械臂/轮胎接触约束
   constraint_cfm: 0.000001  # 微小约束柔度，缓解接触约束病态问题
   solver_type: quick  # 迭代求解器；world 直接求解器在轮胎/球壳接触中出现 LCP 报错
 

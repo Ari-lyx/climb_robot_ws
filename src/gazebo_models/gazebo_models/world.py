@@ -96,6 +96,21 @@ def shell_mesh(path, thickness_ratio, hemisphere=True, latitudes=96, longitudes=
     return vertices,faces
 
 
+def planning_shell_mesh(path, radius, thickness, hemisphere=True):
+    """Lightweight closed collision shell, conservative on both surfaces.
+
+    Inner facets are inscribed. Outer facets are expanded using an upper bound
+    on the angular distance from a cell centre to any corner. At radius 3 m,
+    the bound on lost interior clearance is 14.5 mm (half) / 25.7 mm (full).
+    Gazebo continues to use its separate, dense contact mesh.
+    """
+    latitudes, longitudes = 24, 48
+    extent = math.pi / 2 if hemisphere else math.pi
+    angular_bound = extent / (2 * latitudes) + math.pi / longitudes
+    outer = (radius + thickness) / math.cos(angular_bound)
+    return shell_mesh(path, outer / radius - 1, hemisphere, latitudes, longitudes)
+
+
 def generate_world(directory, config, mode):
     """生成世界文件与世界资源，返回 .world 的绝对路径。
 

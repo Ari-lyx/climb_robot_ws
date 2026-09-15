@@ -1,8 +1,6 @@
 Panels:
   - Class: rviz_common/Displays
     Name: Displays
-  - Class: rviz_common/Help
-    Name: Help
   - Class: rviz_common/Views
     Name: Views
   - Class: rviz_common/Tool Properties
@@ -29,12 +27,25 @@ Visualization Manager:
       Robot Description: robot_description
       Planning Group: arm
       Planning Scene Topic: /monitored_planning_scene
+      Scene Geometry:
+        Show Scene Geometry: false
+        Scene Display Time: 0.1
+      Scene Robot:
+        Show Robot Visual: true
+        Show Robot Collision: false
+        Robot Alpha: 1.0
       Planned Path:
         Trajectory Topic: /display_planned_path
+        Loop Animation: false
+        Show Trail: false
+        Show Robot Visual: true
+        Show Robot Collision: false
       Planning Request:
         Planning Group: arm
-        Query Goal State: true
+        Query Goal State: false
         Query Start State: false
+        Goal State Alpha: 0.35
+        Interactive Marker Size: 0.18
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
@@ -44,3 +55,8 @@ Visualization Manager:
       Pitch: 0.5
       Yaw: 0.7
       Focal Point: {X: 0.0, Y: 0.0, Z: 0.3}
+Window Geometry:
+  Width: 1440
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
