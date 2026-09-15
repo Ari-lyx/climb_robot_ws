@@ -99,6 +99,9 @@ python3 src/validation/run_physics.py traverse
 
 ## 启动排错
 
+- RViz 视角操作：工具栏选择 `Move Camera`，左键拖动旋转、中键拖动平移、滚轮缩放；拖动机械臂目标使用 `Interact`。`moveit.rviz` 必须显式配置 `Tools`，仅配置 `Views/Orbit` 不够。
+- 默认 ODE 求解器使用 `quick`。`world` 直接求解器在本模型的轮胎/球壳接触中复现了 `LCP internal error, s <= 0`；`solver_iterations` 只影响 `quick`。修改配置后需重新构建 `climb_robot_bringup`、`climb_arm_moveit_config` 并重启 launch，已运行的 gzserver 不会自动读取新配置。
+- 用对应 `GAZEBO_MASTER_URI` 下的 `gz stats -p` 检查实时倍率；相机的 10 Hz 是仿真时间频率，0.2 倍实时速度时墙钟输出只有约 2 Hz。这与 RViz 的界面渲染 FPS 是两个指标。关闭 gzclient 不会自动停止 gzserver，请在启动 launch 的终端按 Ctrl+C。
 - `ros2 run` 的可执行程序名是 `drive_demo.py`（包含 `.py`）。它通过 CMake 的 `install(PROGRAMS ...)` 安装，无需在 package.xml 注册 executable。
 - 使用 `--symlink-install` 时源码脚本也必须有执行权限。本工程已将 `scripts/drive_demo.py` 设为可执行；复制工程时请保留权限。
 - `ros2 pkg executables climb_robot_bringup` 应显示 `climb_robot_bringup drive_demo.py`。若没有，确认 source 的是本工作区 `install/setup.bash`。

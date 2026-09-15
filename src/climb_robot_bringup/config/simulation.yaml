@@ -51,8 +51,8 @@ physics:
   step_size: 0.001
   update_rate: 1000
   solver_iterations: 100
-  constraint_cfm: 0.000001  # 微小约束柔度，防止直接求解器遇到奇异接触矩阵
-  solver_type: world  # ODE direct solver for arm/wheel constraint chain
+  constraint_cfm: 0.000001  # 微小约束柔度，缓解接触约束病态问题
+  solver_type: quick  # 迭代求解器；world 直接求解器在轮胎/球壳接触中出现 LCP 报错
 
 # --- 仅视觉焊缝：不生成 collision，不改变磁吸/轮胎接触或 CPU ray 点云 ---
 welds:

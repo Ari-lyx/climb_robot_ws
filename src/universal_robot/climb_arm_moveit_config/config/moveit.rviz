@@ -3,10 +3,22 @@ Panels:
     Name: Displays
   - Class: rviz_common/Help
     Name: Help
+  - Class: rviz_common/Views
+    Name: Views
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
 Visualization Manager:
   Class: ""
+  Enabled: true
   Global Options:
     Fixed Frame: base_link
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
   Displays:
     - Class: rviz_default_plugins/Grid
       Name: Grid
@@ -26,6 +38,8 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
+      Target Frame: <Fixed Frame>
+      Near Clip Distance: 0.01
       Distance: 1.7
       Pitch: 0.5
       Yaw: 0.7
