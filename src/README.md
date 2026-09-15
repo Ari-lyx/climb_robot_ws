@@ -105,3 +105,26 @@ python3 src/validation/run_physics.py traverse
 - 本启动器直接启动 Gazebo 并使用独立模型目录，避免系统其他包的模型路径导出把普通 ROS 包当作模型扫描。球罐使用本地生成网格，雷达使用已安装的第三方资源，不需要下载 TurtleBot3 模型。
 - 雷达 DAE 网格由统一启动器解析为绝对 `file://` 路径；如果依赖文件缺失，会在启动前报告具体路径。模型数据库使用本地空清单，无需在线下载。
 - 可运行 `python3 src/validation/run_physics.py ground --gui` 进行带 Gazebo 客户端的验证（会打开测试窗口并在完成后结束测试进程）。
+
+## 球罐焊缝
+
+`gazebo_models/gazebo_models/welds.py` 独立生成半椭圆焊缝网格与程序化银灰鱼鳞纹理。
+罐壁默认棕褐色；半球显示下部两道环缝、两组错开的纵缝，完整球壳显示四道环缝和三组纵缝；两极保留完整封头。
+
+集中配置在 `climb_robot_bringup/config/simulation.yaml`：
+
+- `tank.color_rgba`：罐壁 RGBA 颜色。
+- `welds.enabled`：焊缝视觉开关。
+- `welds.width / height`：半椭圆截面全宽/凸起高度，默认 45 mm / 6 mm。
+- `welds.ring_angles_deg`：从球底测量的环缝极角，默认 `[25, 70, 110, 155]`。
+- `welds.meridians_per_band / band_offsets_deg`：各相邻环缝之间的纵缝条数和错缝偏移。
+- `welds.texture_pitch`：鱼鳞纹的纵向重复间距，默认 12 mm。
+- `welds.segment_length / cross_section_segments`：网格精度。
+- `welds.surface_offset`：防止焊缝被球壳离散三角面遮盖的微小内移量。
+
+生成资源 `welds.dae`、`weld_scales.png` 随本次世界保存在 `/tmp/climb_robot_*`。
+焊缝只包含 visual，没有 collision：不会增加越障阻力，也不会改变当前 CPU ray 雷达的点云。
+鱼鳞纹是程序化近似，不是参考照片的直接贴图；当前不建模焊缝热影响区或微观粗糙几何。
+
+实际 Gazebo 渲染图：`validation/results/welds/overview.png` 和 `closeup.png`。
+可用 `python3 src/validation/render_welds.py` 重新渲染默认半球的总览和近景（需要本机图形环境、Pillow）；输出在 `/tmp/climb_weld_preview`。

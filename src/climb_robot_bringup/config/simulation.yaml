@@ -42,6 +42,7 @@ tank:
   radius: 3.0
   thickness: 0.06
   center_z: 3.15
+  color_rgba: [0.36, 0.19, 0.095, 1.0]  # 棕褐色罐壁，与银灰焊缝区分
   # 网格细分：越大越光滑，但碰撞三角面更多、仿真更慢
   latitude_segments: 96
   longitude_segments: 192
@@ -50,3 +51,16 @@ physics:
   step_size: 0.001
   update_rate: 1000
   solver_iterations: 100
+
+# --- 仅视觉焊缝：不生成 collision，不改变磁吸/轮胎接触或 CPU ray 点云 ---
+welds:
+  enabled: true
+  width: 0.045                  # 半椭圆截面的全宽 m
+  height: 0.006                 # 朝球心凸起的高度 m
+  surface_offset: 0.0015        # 避免与离散球壳表面重叠闪烁 m
+  ring_angles_deg: [25, 70, 110, 155]  # 从球底量起的极角；半球自动裁剪
+  meridians_per_band: [10, 12, 10]    # 相邻环缝之间的纵缝数量，两极封头无纵缝
+  band_offsets_deg: [0, 15, 0]        # 相邻板带错缝角度
+  segment_length: 0.025         # 沿焊缝的网格分段长度 m
+  cross_section_segments: 12   # 半椭圆截面细分
+  texture_pitch: 0.012          # 鱼鳞纹理沿焊缝的重复间距 m

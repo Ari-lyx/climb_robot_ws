@@ -14,6 +14,7 @@
 import math
 from pathlib import Path
 from xml.sax.saxutils import escape
+from gazebo_models.welds import generate_weld_visual
 
 
 def shell_mesh(path, thickness_ratio, hemisphere=True, latitudes=96, longitudes=192):
@@ -121,9 +122,15 @@ def generate_world(directory, config, mode):
         geometry=f'<geometry><mesh><uri>{escape(mesh.as_uri())}</uri><scale>{r} {r} {r}</scale></mesh></geometry>'
         # 静态 (static) 球罐：作为刚性环境，其反力由环境承担，符合 docs/requirements.md 的约定。
         # 碰撞名 hemisphere_shell / sphere_shell 是磁吸插件识别“壁面类型”的约定名。
+        weld_visual=generate_weld_visual(directory,r,mode,config.get('welds',{}))
+        color=tank.get('color_rgba',[0.36,0.19,0.095,1.0])
+        if len(color)!=4 or any(not math.isfinite(float(c)) or not 0<=float(c)<=1 for c in color):
+            raise ValueError('tank color_rgba must contain four values in [0,1]')
+        rgba=' '.join(str(float(c)) for c in color)
         shell=f'''<model name="tank"><static>true</static><pose>0 0 {center} 0 0 0</pose><link name="shell">
           <collision name="{mode}_shell">{geometry}<surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction><contact><ode><kp>200000</kp><kd>200</kd><max_vel>0.05</max_vel><min_depth>0.0005</min_depth></ode></contact></surface></collision>
-          <visual name="shell_visual">{geometry}<material><ambient>0.45 0.52 0.6 1</ambient><diffuse>0.55 0.62 0.7 1</diffuse><specular>0.2 0.2 0.2 1</specular></material></visual>
+          <visual name="shell_visual">{geometry}<material><ambient>{rgba}</ambient><diffuse>{rgba}</diffuse><specular>0.12 0.08 0.04 1</specular></material></visual>
+          {weld_visual}
         </link></model>'''
     output=directory/'climb.world'
     # 物理参数同样来自 YAML：步长/实时倍率/求解迭代直接影响爬壁稳定性。
