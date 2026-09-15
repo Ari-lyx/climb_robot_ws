@@ -14,3 +14,5 @@
 现有 `gazebo-ros2-control-copyright` 仅作为原目录遗留来源记录保留。
 本版本的驱动是自行实现的 Gazebo 关节扭矩插件，不加载 gazebo_ros2_control。
 球罐网格为本工程程序生成，不使用外部模型资源。
+
+统一启动器会在展开上游宏后，将网格的 `package://` URI 解析为本机安装目录下的绝对 `file://` URI；这样 Gazebo 转换 SDF 后无需通过模型数据库查找雷达网格。没有修改系统安装的第三方文件。

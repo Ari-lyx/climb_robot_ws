@@ -96,3 +96,12 @@ python3 src/validation/run_physics.py traverse
 - 每次启动生成的 STL、SDF、URDF 放在 `/tmp/climb_robot_*`，方便检查；仿真退出后可删除该次目录。
 
 这是刚体运动和附着能力模型，磁力是有界距离衰减近似。曲面差速包含滑移，不保证输入角速度与实际角速度一致；提高磁力会增加转弯阻力。尚未加入 SLAM、路径规划、柔性轮胎、悬架或磁场有限元。
+
+## 启动排错
+
+- `ros2 run` 的可执行程序名是 `drive_demo.py`（包含 `.py`）。它通过 CMake 的 `install(PROGRAMS ...)` 安装，无需在 package.xml 注册 executable。
+- 使用 `--symlink-install` 时源码脚本也必须有执行权限。本工程已将 `scripts/drive_demo.py` 设为可执行；复制工程时请保留权限。
+- `ros2 pkg executables climb_robot_bringup` 应显示 `climb_robot_bringup drive_demo.py`。若没有，确认 source 的是本工作区 `install/setup.bash`。
+- 本启动器直接启动 Gazebo 并使用独立模型目录，避免系统其他包的模型路径导出把普通 ROS 包当作模型扫描。球罐使用本地生成网格，雷达使用已安装的第三方资源，不需要下载 TurtleBot3 模型。
+- 雷达 DAE 网格由统一启动器解析为绝对 `file://` 路径；如果依赖文件缺失，会在启动前报告具体路径。模型数据库使用本地空清单，无需在线下载。
+- 可运行 `python3 src/validation/run_physics.py ground --gui` 进行带 Gazebo 客户端的验证（会打开测试窗口并在完成后结束测试进程）。
