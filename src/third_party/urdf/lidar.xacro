@@ -1,10 +1,20 @@
 <?xml version="1.0"?>
+<!--
+  VLP-16 适配宏：把已安装的 Dataspeed/ros 官方 VLP-16 宏包装成只需要 4 个参数的形式，
+  避免在 robot_description 里直接写一大堆传感器细节。
+
+  climb_lidar 不是插件/框架规定的名字，是本工程自定义的宏名；
+  params 里的 parent/z/samples/hz 同理，靠调用处一一对应传入
+  （见 climb_robot.urdf.xacro 里的 <xacro:climb_lidar .../>）。
+-->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <!-- Adapter to the installed, BSD-licensed Dataspeed VLP-16 macro. -->
   <xacro:include filename="$(find velodyne_description)/urdf/VLP-16.urdf.xacro"/>
   <xacro:macro name="climb_lidar" params="parent z samples hz">
+    <!-- name="lidar" 决定 TF 里传感器坐标系叫 lidar；不用 GPU，走 CPU 光线投射以便无头运行 -->
     <xacro:VLP-16 parent="${parent}" name="lidar" topic="/velodyne_points"
       samples="${samples}" hz="${hz}" min_range="0.15" max_range="30.0" gpu="false">
+      <!-- 雷达装在车体顶面略高处（z 由调用方按 body_height/2+0.015 计算） -->
       <origin xyz="0 0 ${z}" rpy="0 0 0"/>
     </xacro:VLP-16>
   </xacro:macro>

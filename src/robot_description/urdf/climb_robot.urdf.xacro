@@ -1,5 +1,30 @@
 <?xml version="1.0"?>
+<!--
+  四轮滑移差速爬壁机器人的 URDF（用 xacro 参数化）。
+
+  【这里的名字是从哪来的？】
+  下面每个 <xacro:arg name="xxx"> 的名字**都是本工程自己起的**，不是 URDF/SDF 规范
+  里预定义的字段。整条命名链路是：
+
+      simulation.yaml 的 key  ==  xacro:arg 的 name  ==  xacro:property 的 name
+                              ==  URDF/SDF 里 ${} 引用的变量名
+
+  例如 magnet_force 这个“名字”之所以存在，是因为：
+    1. 本工程的 magnetic_drive 插件代码里会读 SDF 子元素 <magnet_force>：
+       sdf->Get<double>("magnet_force", default)
+       —— 名字由插件的读取代码决定，写错就读不到、只能用默认值；
+    2. simulation.yaml 里写了 `magnet_force: 90.0`，launch 启动时把整个 robot 字典
+       作为 mappings 传给 xacro.process_file（见 simulation.launch.py）；
+    3. xacro 用 $(arg magnet_force) 拿到该值并赋给 property，后面用 ${magnet_force}
+       写进 <plugin> 的 <magnet_force> 标签。
+  所以“格式/标准”只规定 <xacro:arg> 的语法，具体叫什么名字完全由我们和插件约定。
+
+  【两种语法不同】
+    $(arg name) —— 取 <xacro:arg> 的值（launch/命令行传入），是“实参”；
+    ${expr}     —— xacro 表达式求值，可做算术和访问 property。
+-->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="climb_robot">
+  <!-- ===== 车体几何与质量（对应 simulation.yaml 的 robot 段）===== -->
   <xacro:arg name="body_length" default="0.42"/>
   <xacro:property name="body_length" value="$(arg body_length)"/>
   <xacro:arg name="body_width" default="0.28"/>
@@ -8,6 +33,7 @@
   <xacro:property name="body_height" value="$(arg body_height)"/>
   <xacro:arg name="body_mass" default="8.0"/>
   <xacro:property name="body_mass" value="$(arg body_mass)"/>
+  <!-- ===== 四个圆柱轮 ===== -->
   <xacro:arg name="wheel_radius" default="0.075"/>
   <xacro:property name="wheel_radius" value="$(arg wheel_radius)"/>
   <xacro:arg name="wheel_width" default="0.045"/>
@@ -18,10 +44,12 @@
   <xacro:property name="wheelbase" value="$(arg wheelbase)"/>
   <xacro:arg name="track_width" default="0.36"/>
   <xacro:property name="track_width" value="$(arg track_width)"/>
+  <!-- axle_z：轮轴相对 base_link 原点的高度，允许为负（轮轴低于车体几何中心） -->
   <xacro:arg name="axle_z" default="-0.035"/>
   <xacro:property name="axle_z" value="$(arg axle_z)"/>
   <xacro:arg name="friction" default="0.9"/>
   <xacro:property name="friction" value="$(arg friction)"/>
+  <!-- ===== 电机/速度环参数：名字必须与 magnetic_drive.cpp 里 sdf->Get<double>(...) 一致 ===== -->
   <xacro:arg name="motor_torque" default="8.0"/>
   <xacro:property name="motor_torque" value="$(arg motor_torque)"/>
   <xacro:arg name="velocity_integral_gain" default="8.0"/>
@@ -36,39 +64,59 @@
   <xacro:property name="wheel_acceleration" value="$(arg wheel_acceleration)"/>
   <xacro:arg name="command_timeout" default="0.5"/>
   <xacro:property name="command_timeout" value="$(arg command_timeout)"/>
+  <!-- ===== 磁吸三参数 =====
+       magnet_force：每轮接触时的吸力上限 [N]
+       magnet_decay：近场衰减长度 [m]，越小吸力随间隙掉得越快
+       magnet_range：捕获距离 [m]，超过它就完全没有吸力 -->
   <xacro:arg name="magnet_force" default="90.0"/>
   <xacro:property name="magnet_force" value="$(arg magnet_force)"/>
   <xacro:arg name="magnet_decay" default="0.012"/>
   <xacro:property name="magnet_decay" value="$(arg magnet_decay)"/>
   <xacro:arg name="magnet_range" default="0.04"/>
   <xacro:property name="magnet_range" value="$(arg magnet_range)"/>
+  <!-- ===== 雷达 ===== -->
   <xacro:arg name="lidar_samples" default="360"/>
   <xacro:property name="lidar_samples" value="$(arg lidar_samples)"/>
   <xacro:arg name="lidar_hz" default="5"/>
   <xacro:property name="lidar_hz" value="$(arg lidar_hz)"/>
   <xacro:arg name="lidar_enabled" default="true"/>
   <xacro:property name="lidar_enabled" value="$(arg lidar_enabled)"/>
+  <!-- 第三方 VLP-16 宏的适配层（见 third_party/urdf/lidar.xacro） -->
   <xacro:include filename="$(find third_party)/urdf/lidar.xacro"/>
+
+  <!-- 车体：长方体，惯性张量按均质长方体公式写，保证 Gazebo 动力学正确 -->
   <link name="base_link">
     <inertial><mass value="${body_mass}"/><inertia ixx="${body_mass*(body_width**2+body_height**2)/12}" iyy="${body_mass*(body_length**2+body_height**2)/12}" izz="${body_mass*(body_length**2+body_width**2)/12}" ixy="0" ixz="0" iyz="0"/></inertial>
     <visual><geometry><box size="${body_length} ${body_width} ${body_height}"/></geometry><material name="orange"><color rgba="1 0.4 0.05 1"/></material></visual>
     <collision><geometry><box size="${body_length} ${body_width} ${body_height}"/></geometry></collision>
   </link>
   <gazebo reference="base_link"><material>Gazebo/Orange</material></gazebo>
+
+  <!-- 轮子宏：一次定义、四次调用，四轮只差安装位置 (x, y)。
+       轮轴统一为 +y，所以圆柱体要绕 x 转 90° 才能立起来。 -->
   <xacro:macro name="wheel" params="name x y">
     <link name="${name}_wheel">
       <inertial><mass value="${wheel_mass}"/><inertia ixx="${wheel_mass*(3*wheel_radius**2+wheel_width**2)/12}" iyy="${wheel_mass*wheel_radius**2/2}" izz="${wheel_mass*(3*wheel_radius**2+wheel_width**2)/12}" ixy="0" ixz="0" iyz="0"/></inertial>
       <visual><origin rpy="${pi/2} 0 0"/><geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry><material name="rubber"><color rgba="0.08 0.08 0.09 1"/></material></visual>
       <collision><origin rpy="${pi/2} 0 0"/><geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry></collision>
     </link>
+    <!-- type="continuous"：无限转动的被动轮；effort 上限即电机最大扭矩 -->
     <joint name="${name}_joint" type="continuous"><parent link="base_link"/><child link="${name}_wheel"/><origin xyz="${x} ${y} ${axle_z}"/><axis xyz="0 1 0"/><limit effort="${motor_torque}" velocity="30"/><dynamics damping="0.01" friction="0.0"/></joint>
+    <!-- Gazebo 接触参数：mu1/mu2 是轮胎-球壳摩擦，kp/kd/minDepth 影响接触刚度与穿透 -->
     <gazebo reference="${name}_wheel"><material>Gazebo/Black</material><mu1>${friction}</mu1><mu2>${friction}</mu2><kp>200000</kp><kd>200</kd><minDepth>0.0005</minDepth><maxVel>0.05</maxVel></gazebo>
   </xacro:macro>
+  <!-- 差速转向依赖左右两侧速度差，所以轮名必须区分 left / right -->
   <xacro:wheel name="front_left" x="${wheelbase/2}" y="${track_width/2}"/>
   <xacro:wheel name="front_right" x="${wheelbase/2}" y="${-track_width/2}"/>
   <xacro:wheel name="rear_left" x="${-wheelbase/2}" y="${track_width/2}"/>
   <xacro:wheel name="rear_right" x="${-wheelbase/2}" y="${-track_width/2}"/>
+  <!-- 雷达可选：lidar_enabled=false 时整个传感器不挂载 -->
   <xacro:if value="${lidar_enabled}"><xacro:climb_lidar parent="base_link" z="${body_height/2+0.015}" samples="${lidar_samples}" hz="${lidar_hz}"/></xacro:if>
+
+  <!-- 自研 ModelPlugin：四轮扭矩驱动 + 近场磁吸。
+       plugin 内每个子标签名都被 magnetic_drive.cpp 用 sdf->Get<>(...) 读取，
+       标签名和值一起通过这里的 ${} 注入，形成“YAML → xacro → 插件”的单向数据流。
+       tank_model 指定要吸附的模型名，对应 world.py 里生成的 <model name="tank">。 -->
   <gazebo><plugin name="magnetic_drive" filename="libmagnetic_drive.so">
     <ros><namespace>/</namespace></ros>
     <wheel_radius>${wheel_radius}</wheel_radius><wheel_width>${wheel_width}</wheel_width><track_width>${track_width}</track_width>

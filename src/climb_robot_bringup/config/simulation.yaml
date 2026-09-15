@@ -1,9 +1,19 @@
 # SI units: m, kg, s, N, Nm. Restart launch after changes.
+# 单位统一为 SI：m / kg / s / N / N·m。改动后需要重新 launch（启动时才生成世界与 URDF）。
+#
+# 【这些 key 名是谁定的？】
+# 全部是本工程自定义的，但必须与下面两处名字严格一致，否则参数会被静默忽略：
+#   1. robot 段的 key  ->  launch 把整个 robot 字典作为 mappings 传给 xacro，
+#      因此 key 必须存在同名 <xacro:arg name="key">（见 climb_robot.urdf.xacro）；
+#   2. 插件相关 key（motor_torque / velocity_gain / magnet_* 等）-> 名字必须与
+#      magnetic_drive.cpp 里 sdf->Get<double>("...") 读取的 SDF 标签同名。
 robot:
+  # --- 车体宏观尺寸与质量 ---
   body_length: 0.42
   body_width: 0.28
   body_height: 0.12
   body_mass: 8.0
+  # --- 车轮几何/质量、轴距/轮距与轮轴高度（axle_z 允许为负）---
   wheel_radius: 0.075
   wheel_width: 0.045
   wheel_mass: 0.6
@@ -11,6 +21,7 @@ robot:
   track_width: 0.36
   axle_z: -0.035
   friction: 0.9
+  # --- 电机与速度环：扭矩上限、PI 增益、限速、加速度限幅、命令超时（超时后制动）---
   motor_torque: 8.0
   velocity_gain: 2.0
   velocity_integral_gain: 8.0
@@ -18,18 +29,23 @@ robot:
   max_angular_speed: 0.8
   wheel_acceleration: 8.0
   command_timeout: 0.5
+  # --- 磁吸三参数：接触吸力上限[N]、近场衰减长度[m]、捕获距离[m] ---
   magnet_force: 90.0
   magnet_decay: 0.012
   magnet_range: 0.04
+  # --- 雷达 ---
   lidar_samples: 360
   lidar_hz: 5
   lidar_enabled: true
+# --- 球罐：几何由 world.py 按这些值现场生成 STL + SDF（没有静态 .world 文件）---
 tank:
   radius: 3.0
   thickness: 0.06
   center_z: 3.15
+  # 网格细分：越大越光滑，但碰撞三角面更多、仿真更慢
   latitude_segments: 96
   longitude_segments: 192
+# --- ODE 物理：步长越小越稳定；update_rate 决定实时倍率（1000 步/秒 => 实时）---
 physics:
   step_size: 0.001
   update_rate: 1000
