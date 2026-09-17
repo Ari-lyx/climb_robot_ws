@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include <camera_info_manager/camera_info_manager.hpp>
@@ -87,7 +88,8 @@ protected:
   /// \brief ROS image messages
 
 protected:
-  sensor_msgs::msg::Image image_msg_, depth_msg_;
+  sensor_msgs::msg::Image color_msg_, depth_msg_;
+  std::mutex color_mutex_;
   sensor_msgs::msg::PointCloud2 pointcloud_msg_;
 };
 }  // namespace gazebo

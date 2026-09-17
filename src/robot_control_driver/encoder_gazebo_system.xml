@@ -1,0 +1,5 @@
+<library path="encoder_gazebo_system">
+  <class name="climb_robot/EncoderGazeboSystem" type="climb_robot::EncoderGazeboSystem" base_class_type="gazebo_ros2_control::GazeboSystemInterface">
+    <description>Gazebo effort system with position-derived encoder velocity and separate raw telemetry.</description>
+  </class>
+</library>

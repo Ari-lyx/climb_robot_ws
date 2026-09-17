@@ -97,11 +97,13 @@ void GazeboRosRealsense::OnNewFrame(
   };
   const auto image_pub = camera_publishers.at(camera_id);
 
+  sensor_msgs::msg::Image image_msg;
+  // Each render stream owns its message; IR must not overwrite cloud RGB.
   // copy data into image
-  this->image_msg_.header.frame_id =
+  image_msg.header.frame_id =
     this->cameraParamsMap_[camera_id].optical_frame;
-  this->image_msg_.header.stamp.sec = current_time.sec;
-  this->image_msg_.header.stamp.nanosec = current_time.nsec;
+  image_msg.header.stamp.sec = current_time.sec;
+  image_msg.header.stamp.nanosec = current_time.nsec;
 
   // set image encoding
   const std::map<std::string, std::string> supported_image_encodings = {
@@ -111,7 +113,7 @@ void GazeboRosRealsense::OnNewFrame(
 
   // copy from simulation image to ROS msg
   sensor_msgs::fillImage(
-    this->image_msg_, pixel_format, cam->ImageHeight(),
+    image_msg, pixel_format, cam->ImageHeight(),
     cam->ImageWidth(),
     cam->ImageDepth() * cam->ImageWidth(),
     reinterpret_cast<const void *>(cam->ImageData()));
@@ -125,8 +127,12 @@ void GazeboRosRealsense::OnNewFrame(
 
   // publish to ROS
   auto camera_info_msg =
-    cameraInfo(this->image_msg_, cameras.at(camera_id)->HFOV().Radian());
-  image_pub->publish(this->image_msg_, camera_info_msg);
+    cameraInfo(image_msg, cameras.at(camera_id)->HFOV().Radian());
+  image_pub->publish(image_msg, camera_info_msg);
+  if (camera_id == COLOR_CAMERA_NAME) {
+    std::lock_guard<std::mutex> lock(color_mutex_);
+    color_msg_ = std::move(image_msg);
+  }
 }
 
 // Referenced from gazebo_plugins
@@ -142,10 +148,10 @@ bool GazeboRosRealsense::FillPointCloudHelper(
   pcd_modifier.resize(rows_arg * cols_arg);
   point_cloud_msg.is_dense = true;
 
-  sensor_msgs::PointCloud2Iterator<float> iter_x(pointcloud_msg_, "x");
-  sensor_msgs::PointCloud2Iterator<float> iter_y(pointcloud_msg_, "y");
-  sensor_msgs::PointCloud2Iterator<float> iter_z(pointcloud_msg_, "z");
-  sensor_msgs::PointCloud2Iterator<uint8_t> iter_rgb(pointcloud_msg_, "rgb");
+  sensor_msgs::PointCloud2Iterator<float> iter_x(point_cloud_msg, "x");
+  sensor_msgs::PointCloud2Iterator<float> iter_y(point_cloud_msg, "y");
+  sensor_msgs::PointCloud2Iterator<float> iter_z(point_cloud_msg, "z");
+  sensor_msgs::PointCloud2Iterator<uint8_t> iter_rgb(point_cloud_msg, "rgb");
 
   const float * toCopyFrom = reinterpret_cast<const float *>(data_arg);
   int index = 0;
@@ -153,68 +159,38 @@ bool GazeboRosRealsense::FillPointCloudHelper(
   double hfov = this->depthCam->HFOV().Radian();
   double fl = (static_cast<double>(this->depthCam->ImageWidth()) / (2.0 * tan(hfov / 2.0)));
 
-  // convert depth to point cloud
-  for (uint32_t j = 0; j < rows_arg; j++) {
-    double pAngle;
-    if (rows_arg > 1) {
-      pAngle = atan2(static_cast<double>(j) - 0.5 * static_cast<double>(rows_arg - 1), fl);
-    } else {
-      pAngle = 0.0;
-    }
-
+  // Snapshot color once per cloud, not once per pixel. The former shared
+  // color/IR buffer could also be empty before the first image callback.
+  sensor_msgs::msg::Image color;
+  {
+    std::lock_guard<std::mutex> lock(color_mutex_);
+    color = color_msg_;
+  }
+  const bool has_color = color.width == cols_arg && color.height == rows_arg &&
+    color.encoding == sensor_msgs::image_encodings::RGB8 &&
+    color.step >= cols_arg * 3 && color.data.size() >= size_t(color.step) * rows_arg;
+  const double cx = 0.5 * (cols_arg - 1);
+  const double cy = 0.5 * (rows_arg - 1);
+  for (uint32_t j = 0; j < rows_arg; ++j) {
+    const double y_scale = (j - cy) / fl;
     for (uint32_t i = 0; i < cols_arg;
-      i++, ++iter_x, ++iter_y, ++iter_z, ++iter_rgb)
-    {
-      double yAngle;
-      if (cols_arg > 1) {
-        yAngle = atan2(static_cast<double>(i) - 0.5 * static_cast<double>(cols_arg - 1), fl);
-      } else {
-        yAngle = 0.0;
-      }
-
-      double depth =
-        toCopyFrom[index++];   // + 0.0*this->myParent->GetNearClip();
-
+         ++i, ++iter_x, ++iter_y, ++iter_z, ++iter_rgb) {
+      const double depth = toCopyFrom[index++];
       if (depth > pointCloudCutOff_ && depth < pointCloudCutOffMax_) {
-        // in optical frame
-        // hardcoded rotation rpy(-M_PI/2, 0, -M_PI/2) is built-in
-        // to urdf, where the *_optical_frame should have above relative
-        // rotation from the physical camera *_frame
-        *iter_x = depth * tan(yAngle);
-        *iter_y = depth * tan(pAngle);
+        *iter_x = depth * (i - cx) / fl;
+        *iter_y = depth * y_scale;
         *iter_z = depth;
-      } else {  // point in the unseeable range
+      } else {
         *iter_x = *iter_y = *iter_z = std::numeric_limits<float>::quiet_NaN();
         point_cloud_msg.is_dense = false;
       }
-
-      // put image color data for each point
-      uint8_t * image_src = reinterpret_cast<uint8_t *>(&(this->image_msg_.data[0]));
-      if (this->image_msg_.data.size() == rows_arg * cols_arg * 3) {
-        // color
-        if (this->image_msg_.encoding == sensor_msgs::image_encodings::RGB8) {
-          iter_rgb[2] = image_src[i * 3 + j * cols_arg * 3 + 0];
-          iter_rgb[1] = image_src[i * 3 + j * cols_arg * 3 + 1];
-          iter_rgb[0] = image_src[i * 3 + j * cols_arg * 3 + 2];
-        } else if (this->image_msg_.encoding == sensor_msgs::image_encodings::BGR8) {
-          iter_rgb[0] = image_src[i * 3 + j * cols_arg * 3 + 0];
-          iter_rgb[1] = image_src[i * 3 + j * cols_arg * 3 + 1];
-          iter_rgb[2] = image_src[i * 3 + j * cols_arg * 3 + 2];
-        } else {
-          throw std::runtime_error(
-                  "unsupported colour encoding: " +
-                  this->image_msg_.encoding);
-        }
-      } else if (this->image_msg_.data.size() == rows_arg * cols_arg) {
-        // mono (or bayer?  @todo; fix for bayer)
-        iter_rgb[0] = image_src[i + j * cols_arg];
-        iter_rgb[1] = image_src[i + j * cols_arg];
-        iter_rgb[2] = image_src[i + j * cols_arg];
+      if (has_color) {
+        const auto pixel = color.data.data() + size_t(j) * color.step + i * 3;
+        iter_rgb[2] = pixel[0];
+        iter_rgb[1] = pixel[1];
+        iter_rgb[0] = pixel[2];
       } else {
-        // no image
-        iter_rgb[0] = 0;
-        iter_rgb[1] = 0;
-        iter_rgb[2] = 0;
+        iter_rgb[0] = iter_rgb[1] = iter_rgb[2] = 0;
       }
     }
   }

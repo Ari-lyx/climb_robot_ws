@@ -118,7 +118,8 @@ MoveIt → /arm_controller/follow_joint_trajectory              │
 
 MoveIt 订阅实际状态，不靠发布假 joint_states 驱动 Gazebo。
 同一话题由两个发布者发送互不重叠的关节子集本身不一定冲突，但本工程进一步采用单一汇总出口，方便检查完整十关节状态。
-汇总节点拒绝错误来源的关节名，丢弃过时数据，不伪造缺失角度。
+转发节点拒绝错误来源的关节名，保留原始时间戳与速度，每个来源最多 50 Hz。
+每条消息可只含轮子或机械臂子集；下游按关节名更新，不把异步测量拼成同一时刻。
 底盘四轮没有进入 ros2_control，机械臂控制器也没有声明四轮接口。
 不要在仿真旁再启动 `joint_state_publisher_gui` 或另一套假硬件。
 
@@ -162,7 +163,26 @@ ros2 action list | grep follow_joint_trajectory
 
 - UR3e 保留官方尺寸和惯量，无缩放。原有底盘加装后总质量明显增加。
 - 每轮磁吸上限改为 250 N，车轮电机上限改为 18 N·m，均在统一 YAML 可调整；旧版 90 N / 8 N·m 的报告不代表加装后的承载能力。
-- ODE 采用 `solver_type: world` 直接求解器与微小 `constraint_cfm`，改善多连杆/多接触的求解稳定性。
+- ODE 采用 `solver_type: quick`、300 次迭代、1 ms 步长和 `constraint_cfm: 1e-6`。
 - 机械臂使用 effort 轨迹控制，位置反馈进入 PID，施加关节扭矩；没有逐帧直接设置连杆位姿。
 - 相机使用 75 g 均质外壳惯量近似，替换了所提供描述中不满足惯量三角不等式的占位值。
 - 挂载关节是刚性固定连接；没有柔性支架、线缆拖曳、真实负载辨识或联合车臂稳定性优化。
+
+
+## 稳定运行配置（2026-09-16）
+
+默认加载 `climb_arm_moveit_config/config/stable.rviz`：Fixed Frame 为 world，
+深度点云默认关闭，开启后使用 Points，不积累历史点；需要拖动机械臂目标时再开启 Query Goal State。
+用户原有安装目录里的 `moveit.rviz` 已备份并保留；使用个人配置时显式指定：
+
+```bash
+ros2 launch climb_robot_bringup simulation.launch.py rviz_config:=/absolute/path/personal.rviz
+```
+
+MoveIt 和 RViz 等 arm_controller 成功激活后启动。Humble 插件卸载存在关闭崩溃，
+launch 为这两个进程单独设置 LD_PRELOAD，让相关插件库保持加载到进程退出；不修改系统库。
+
+机械臂硬件适配层仍转交原 gazebo_ros2_control 的 effort 命令，速度反馈改为实际关节角度
+相对仿真时间的差分；原始 ODE 速度保留在 `/arm/raw_joint_states`，用于比较，不能再转发到 `/joint_states`。
+位置、惯量、PID 和停止容差保持不变。该处理修正的是仿真反馈不一致，不等同于解决 ODE 的全部动力学误差。
+详细原因、对比实验与测试范围见 [稳定性修复报告](stability-fix-2026-09-16.md)。

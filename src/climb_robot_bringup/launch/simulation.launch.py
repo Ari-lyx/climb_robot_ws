@@ -21,7 +21,8 @@ import yaml
 import xacro
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction, ExecuteProcess, Shutdown
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, ExecuteProcess, Shutdown, RegisterEventHandler
+from launch.event_handlers import OnProcessExit
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -133,7 +134,10 @@ def setup(context):
     extras=[Node(package='climb_robot_bringup',executable='joint_state_mux.py',parameters=[{'use_sim_time':True}],output='screen')]
     if arm_enabled:
         for controller in ('arm_joint_state_broadcaster','arm_controller'):
-            extras.append(Node(package='controller_manager',executable='spawner',arguments=[controller,'--controller-manager','/controller_manager','--controller-manager-timeout','120'],output='screen'))
+            spawner = Node(package='controller_manager',executable='spawner',arguments=[controller,'--controller-manager','/controller_manager','--controller-manager-timeout','120'],output='screen')
+            extras.append(spawner)
+            if controller == 'arm_controller':
+                arm_spawner = spawner
     if moveit_enabled:
         # MoveIt does not need the dense Gazebo contact mesh. Inscribed inner
         # facets conservatively reduce free space; expand the outer surface so
@@ -145,9 +149,33 @@ def setup(context):
             planning_shell_mesh(planning_mesh,radius,float(config['tank']['thickness']),mode=='hemisphere')
         share=Path(get_package_share_directory('climb_arm_moveit_config'))
         moveit_config=runpy.run_path(str(share/'config/build_config.py'))['make_moveit'](description,arm_initial)
-        extras.append(Node(package='moveit_ros_move_group',executable='move_group',parameters=[moveit_config],output='screen'))
-        extras.append(Node(package='climb_robot_bringup',executable='planning_environment.py',parameters=[{'use_sim_time':True,'world_mesh':planning_mesh, 'radius':float(config['tank']['radius']),'center_z':float(config['tank']['center_z'])}],output='screen'))
-        extras.append(Node(package='rviz2',executable='rviz2',arguments=['-d',str(share/'config/moveit.rviz')],parameters=[moveit_config],condition=IfCondition(LaunchConfiguration('rviz')),output='screen'))
+        # Humble's plugin-owned callback weak references may outlive dlclose
+        # during shutdown (MoveIt #1597). Keep these DSOs resident until process
+        # exit; nodes and plugin instances still follow normal destruction.
+        def plugin_environment(packages):
+            libraries = [str(Path(get_package_prefix(package)) / 'lib' / library)
+                         for package, library in packages]
+            missing = [path for path in libraries if not Path(path).is_file()]
+            if missing:
+                raise FileNotFoundError(f'MoveIt runtime libraries missing: {missing}')
+            return {'LD_PRELOAD': ':'.join(libraries +
+                    ([os.environ['LD_PRELOAD']] if os.environ.get('LD_PRELOAD') else []))}
+        controller_library = ('moveit_simple_controller_manager', 'libmoveit_simple_controller_manager.so')
+        controller_env = plugin_environment([controller_library])
+        rviz_env = plugin_environment([
+            ('moveit_ros_visualization', 'libmoveit_motion_planning_rviz_plugin.so'), controller_library])
+        moveit_nodes = []
+        moveit_nodes.append(Node(package='moveit_ros_move_group',executable='move_group',parameters=[moveit_config],additional_env=controller_env,output='screen'))
+        moveit_nodes.append(Node(package='climb_robot_bringup',executable='planning_environment.py',parameters=[{'use_sim_time':True,'world_mesh':planning_mesh, 'radius':float(config['tank']['radius']),'center_z':float(config['tank']['center_z'])}],output='screen'))
+        moveit_nodes.append(Node(package='rviz2',executable='rviz2',arguments=['-d',LaunchConfiguration('rviz_config')],parameters=[moveit_config],additional_env=rviz_env,condition=IfCondition(LaunchConfiguration('rviz')),output='screen'))
+        # Register before starting the spawner, including on fast machines.
+        # A successful spawner means the model and active controller exist.
+        def start_moveit(event, context):
+            if event.returncode != 0:
+                return [Shutdown(reason='Arm controller failed to activate')]
+            return moveit_nodes
+        extras.insert(0, RegisterEventHandler(OnProcessExit(
+            target_action=arm_spawner, on_exit=start_moveit)))
     return extras+[
         # gzserver 直接加载现场生成的 world 文件；加载 ROS 初始化与实体工厂两个系统插件。
         # on_exit=Shutdown：用户关掉 Gazebo 后，整个 launch（含各节点）一起退出。
@@ -159,7 +187,7 @@ def setup(context):
                        additional_env=gazebo_env,output='screen',
                        condition=IfCondition(LaunchConfiguration('gui'))),
         # 把同一份 URDF 字符串喂给 robot_state_publisher，保证 TF 与 Gazebo 实体一致。
-        Node(package='robot_state_publisher',executable='robot_state_publisher',parameters=[{'robot_description':description,'use_sim_time':True}],output='screen'),
+        Node(package='robot_state_publisher',executable='robot_state_publisher',parameters=[{'robot_description':description,'use_sim_time':True,'publish_frequency':100.0}],output='screen'),
         # 用 spawn_entity.py 把机器人插到解析计算出的出生位姿（x y z R P Y）。
         Node(package='gazebo_ros',executable='spawn_entity.py',arguments=['-entity','climb_robot','-file',str(Path(output,'robot.urdf')),
             '-x',str(pose[0]),'-y',str(pose[1]),'-z',str(pose[2]),'-R',str(pose[3]),'-P',str(pose[4]),'-Y',str(pose[5]),'-timeout','120'],output='screen')]
@@ -176,6 +204,8 @@ def generate_launch_description():
         DeclareLaunchArgument('camera',default_value='true',choices=['true','false']),
         DeclareLaunchArgument('moveit',default_value='true',choices=['true','false']),
         DeclareLaunchArgument('rviz',default_value='true',choices=['true','false']),
+        DeclareLaunchArgument('rviz_config',default_value=str(Path(get_package_share_directory('climb_arm_moveit_config'))/'config/stable.rviz'),
+                             description='RViz preset; use a separate path for personal saved layouts'),
         DeclareLaunchArgument('gui',default_value='true',choices=['true','false']),
         # spawn_angle_deg：出生角，从球底沿 +x 量起，0=球底，90=竖直内壁，180=顶端。
         DeclareLaunchArgument('spawn_angle_deg',default_value='0'),

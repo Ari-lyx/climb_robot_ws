@@ -1,0 +1,81 @@
+Panels:
+- Class: rviz_common/Displays
+  Name: Displays
+- Class: rviz_common/Views
+  Name: Views
+- Class: rviz_common/Tool Properties
+  Name: Tool Properties
+Visualization Manager:
+  Class: ''
+  Enabled: true
+  Global Options:
+    Fixed Frame: world
+    Frame Rate: 30
+  Tools:
+  - Class: rviz_default_plugins/Interact
+    Hide Inactive Objects: true
+  - Class: rviz_default_plugins/MoveCamera
+  - Class: rviz_default_plugins/Select
+  - Class: rviz_default_plugins/FocusCamera
+  Displays:
+  - Class: rviz_default_plugins/Grid
+    Name: Grid
+    Enabled: true
+  - Class: moveit_rviz_plugin/MotionPlanning
+    Name: MotionPlanning
+    Enabled: true
+    Robot Description: robot_description
+    Planning Group: arm
+    Planning Scene Topic: /monitored_planning_scene
+    Scene Geometry:
+      Show Scene Geometry: false
+      Scene Display Time: 0.1
+    Scene Robot:
+      Show Robot Visual: true
+      Show Robot Collision: false
+      Robot Alpha: 1.0
+    Planned Path:
+      Trajectory Topic: /display_planned_path
+      Loop Animation: false
+      Show Trail: false
+      Show Robot Visual: true
+      Show Robot Collision: false
+    Planning Request:
+      Planning Group: arm
+      Query Goal State: false
+      Query Start State: false
+      Goal State Alpha: 0.35
+      Interactive Marker Size: 0.18
+  - Class: rviz_default_plugins/PointCloud2
+    Name: Depth points (enable when needed)
+    Enabled: false
+    Style: Points
+    Size (Pixels): 2
+    Decay Time: 0
+    Selectable: false
+    Position Transformer: XYZ
+    Color Transformer: RGB8
+    Topic:
+      Value: /d435i/depth/color/points
+      Depth: 2
+      History Policy: Keep Last
+      Reliability Policy: Best Effort
+      Durability Policy: Volatile
+      Filter size: 5
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Target Frame: <Fixed Frame>
+      Near Clip Distance: 0.01
+      Distance: 1.7
+      Pitch: 0.5
+      Yaw: 0.7
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.3
+Window Geometry:
+  Width: 1440
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false

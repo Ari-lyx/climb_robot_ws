@@ -1,35 +1,61 @@
 #!/usr/bin/env python3
-"""One /joint_states publisher; disjoint wheel/arm sources, no invented positions."""
+"""Forward disjoint joint sources without changing measurement timestamps.
+
+JointState may contain a subset of joints. robot_state_publisher and MoveIt
+retain the other joints themselves; merging asynchronously sampled wheels and
+arm under a newly generated timestamp would misrepresent their acquisition time.
+"""
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+
+
 class JointStateMux(Node):
     def __init__(self):
-        super().__init__('joint_state_mux');self.sources={}
-        self.pub=self.create_publisher(JointState,'/joint_states',10)
-        self.create_subscription(JointState,'/wheel_joint_states',lambda m:self.update('wheel',m),10)
-        self.create_subscription(JointState,'/arm_joint_state_broadcaster/joint_states',lambda m:self.update('arm',m),10)
-        self.create_timer(.02,self.publish)
-    def update(self,source,msg):
-        if len(msg.name)!=len(msg.position):return
-        if any(name.startswith('arm_') != (source=='arm') for name in msg.name):
-            self.get_logger().error('Rejected conflicting joint source: '+source);return
-        self.sources[source]=msg
-    def publish(self):
-        msg=JointState();msg.header.stamp=self.get_clock().now().to_msg()
-        now=self.get_clock().now().nanoseconds
-        for source in self.sources.values():
-            age=now-source.header.stamp.sec*10**9-source.header.stamp.nanosec
-            if age<0 or age>500_000_000:continue
-            msg.name.extend(source.name);msg.position.extend(source.position)
-            # Gazebo's wheel driver does not publish effort; omit merged optional fields
-            # instead of fabricating measured torque for the wheels.
-        if msg.name:self.pub.publish(msg)
+        super().__init__('joint_state_mux')
+        self.last_stamp = {}
+        self.pub = self.create_publisher(JointState, '/joint_states', 10)
+        self.create_subscription(JointState, '/wheel_joint_states',
+                                 lambda msg: self.update('wheel', msg), 10)
+        self.create_subscription(JointState, '/arm_joint_state_broadcaster/joint_states',
+                                 lambda msg: self.update('arm', msg), 10)
+
+    def update(self, source, msg):
+        size = len(msg.name)
+        if not size or len(msg.position) != size:
+            return
+        if any(len(values) not in (0, size) for values in (msg.velocity, msg.effort)):
+            return
+        if len(set(msg.name)) != size:
+            return
+        wheels = {'front_left_joint', 'front_right_joint',
+                  'rear_left_joint', 'rear_right_joint'}
+        if any((not name.startswith('arm_')) if source == 'arm'
+               else name not in wheels for name in msg.name):
+            self.get_logger().error('Rejected conflicting joint source: ' + source)
+            return
+        # The arm broadcaster can run at the 1 kHz control rate. Bound the
+        # visualization/state-monitor feed to 50 Hz per source without restamping.
+        stamp = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
+        previous = self.last_stamp.get(source)
+        if previous is not None and 0 <= stamp - previous < 20_000_000:
+            return
+        self.last_stamp[source] = stamp
+        self.pub.publish(msg)
+
+
 def main():
-    rclpy.init();node=JointStateMux()
-    try:rclpy.spin(node)
-    except KeyboardInterrupt:pass
+    rclpy.init()
+    node = JointStateMux()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
-        if rclpy.ok():rclpy.shutdown()
-if __name__=='__main__':main()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
